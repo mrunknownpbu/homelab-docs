@@ -54,7 +54,7 @@ Unraid 7.3.2, kernel 6.18.38, Docker 29.5.3. Also on the storage network at `<na
 
 ### MYPHY-UBUNTU-MASTER-SERVER
 
-Ubuntu 24.04.5, kernel 6.8.0-142, Docker 29.8.1. Also on the storage network at `<master-storage-ip>`. Its onboard Matrox G200eW video points to a Dell server board; the NAS runs an iDRAC6 console container.
+Ubuntu 24.04.5, kernel 6.8.0-142, Docker 29.8.1. Also on the storage network at `<master-storage-ip>`. The hardware is a Dell PowerEdge R610, which has an iDRAC6 management controller; the NAS runs an iDRAC6 console container.
 
 | Storage | Size | Used |
 | --- | --- | --- |
