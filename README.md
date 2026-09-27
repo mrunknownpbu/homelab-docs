@@ -6,13 +6,13 @@ IP addresses are replaced with placeholders such as `<nas-ip>`.
 
 ## Overview
 
-The homelab is five servers running 48 Docker containers, mostly a self-hosted media stack. The Unraid NAS holds 99 TB of storage and runs 34 of the containers; four Ubuntu servers handle playback, transcoding, AI and testing.
+The homelab is five servers running 49 Docker containers, mostly a self-hosted media stack. The Unraid NAS holds 99 TB of storage and runs 35 of the containers; four Ubuntu servers handle playback, transcoding, AI and testing.
 
 | Host | IP | Role | OS | CPU | RAM | GPU |
 | --- | --- | --- | --- | --- | --- | --- |
 | ImranNas | `<nas-ip>` | Storage, downloads, \*arr apps, most services | Unraid OS 7.3.2 | Xeon E5-2687W v3, 40 threads | 62 GB | GTX 1650 Super |
 | MYPHY-UBUNTU-MASTER-SERVER | `<master-ip>` | Transcoding (Tdarr node), tools | Ubuntu 24.04.5 | Xeon X5675, 24 threads | 125 GB | Tesla P4 |
-| MYPHY-UBUNTU-MEDIA-SERVER | `<media-ip>` | Playback: Jellyfin, Plex, Komga | Ubuntu 24.04.5 (FIPS kernel) | Ryzen 5 5600G, 12 threads | 30 GB | RTX 3070 |
+| MYPHY-UBUNTU-MEDIA-SERVER | `<media-ip>` | Playback: Jellyfin, Plex, Komga, Navidrome | Ubuntu 24.04.5 (FIPS kernel) | Ryzen 5 5600G, 12 threads | 30 GB | RTX 3070 |
 | MYPHY-UBUNTU-AI-SERVER | `<ai-ip>` | AI: subtitle-ai | Ubuntu 26.04.1 | Ryzen 5 5500, 12 threads | 14 GB | RTX 3070 (8 GB) |
 | MYPHY-UBUNTU-TESTING-SERVER | `<testing-ip>` | Testing: Dockhand, OmniRoute | Ubuntu 24.04.5 | AMD RX-427BB, 4 threads | 6.7 GB | Radeon R7 (integrated) |
 
@@ -94,7 +94,7 @@ Ubuntu 26.04.1, kernel 7.0.0-34, Docker 29.8.1, NVIDIA driver 595.91.07. Gigabyt
 
 ## Services
 
-All 48 containers were running when last checked: 2026-09-27 for Master and AI, 2026-09-25 for the rest. Port is the host port for the web UI or API; a blank means none is published. Three services run on more than one host: metube, tdarr_node and docker-socket-proxy.
+All 49 containers were running on 2026-09-27. Port is the host port for the web UI or API; a blank means none is published. Three services run on more than one host: metube, tdarr_node and docker-socket-proxy.
 
 ### Media playback and libraries
 
@@ -108,6 +108,7 @@ All 48 containers were running when last checked: 2026-09-27 for Master and AI, 
 | Immich (photos) | NAS | 8089 | imagegenius/immich |
 | Immich Postgres | NAS | | immich-app/postgres 16 |
 | Redis (Immich) | NAS | | redis:8-alpine |
+| Navidrome (music) | Media | 4533 | deluan/navidrome |
 
 ### Requests, stats and sync
 
@@ -144,6 +145,7 @@ qBittorrent and NZBGet run inside Gluetun's network namespace, so their traffic 
 | NZBGet | NAS | via Gluetun | linuxserver/nzbget |
 | MeTube | NAS | 8081 | alexta69/metube |
 | MeTube | Media | 8081 | alexta69/metube |
+| Downtify | NAS | 8000 | henriquesebastiao/downtify |
 
 ### Transcoding and subtitles
 
@@ -154,7 +156,6 @@ qBittorrent and NZBGet run inside Gluetun's network namespace, so their traffic 
 | Tdarr node | Master | | haveagitgat/tdarr_node |
 | Tdarr Inform | NAS | 5004 | deathbybandaid/tdarr_inform |
 | subtitle-ai | AI | 8099 | subtitle-ai:dev (local build) |
-| subtitle-ai-translate-server | Media | 8091 | subtitle-ai:dev (local build) |
 | Jellyfin SubSync | NAS | 8420 | marnalas/jellyfin-subsync-sidecar |
 
 ### Files and tools
