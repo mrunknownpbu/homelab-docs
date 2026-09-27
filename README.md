@@ -208,6 +208,6 @@ The NAS is Unraid, so `systemctl` isn't available there; check Docker with `dock
 ### Known issues and follow-ups
 
 - [ ] The Media server mounts `/data` from `<nas-ip>`, not over the 10 GbE storage network (`<nas-storage-ip>`) that Master uses.
-- [ ] Add a `~/.ssh/config` alias for the NAS, like the other three hosts have.
+- [x] Add a `~/.ssh/config` alias for the NAS, like the other three hosts have.
 - [ ] Nearly every image uses the `latest` tag, so a pull can bring in breaking changes; pin versions for critical services (Vaultwarden, Immich).
 - [ ] Watch NAS disk1 and disk2, the fullest array disks at 76% and 75%.
