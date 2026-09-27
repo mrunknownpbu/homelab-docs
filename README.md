@@ -6,13 +6,14 @@ IP addresses are replaced with placeholders such as `<nas-ip>`.
 
 ## Overview
 
-The homelab is four servers running 47 Docker containers, mostly a self-hosted media stack. The Unraid NAS holds 99 TB of storage and runs 34 of the containers; three Ubuntu servers handle playback, transcoding and testing.
+The homelab is five servers running 48 Docker containers, mostly a self-hosted media stack. The Unraid NAS holds 99 TB of storage and runs 34 of the containers; four Ubuntu servers handle playback, transcoding, AI and testing.
 
 | Host | IP | Role | OS | CPU | RAM | GPU |
 | --- | --- | --- | --- | --- | --- | --- |
 | ImranNas | `<nas-ip>` | Storage, downloads, \*arr apps, most services | Unraid OS 7.3.2 | Xeon E5-2687W v3, 40 threads | 62 GB | GTX 1650 Super |
-| MYPHY-UBUNTU-MASTER-SERVER | `<master-ip>` | Transcoding (Tdarr node), subtitle AI, tools | Ubuntu 24.04.5 | Xeon X5675, 24 threads | 125 GB | Tesla P4 |
+| MYPHY-UBUNTU-MASTER-SERVER | `<master-ip>` | Transcoding (Tdarr node), tools | Ubuntu 24.04.5 | Xeon X5675, 24 threads | 125 GB | Tesla P4 |
 | MYPHY-UBUNTU-MEDIA-SERVER | `<media-ip>` | Playback: Jellyfin, Plex, Komga | Ubuntu 24.04.5 (FIPS kernel) | Ryzen 5 5600G, 12 threads | 30 GB | RTX 3070 |
+| MYPHY-UBUNTU-AI-SERVER | `<ai-ip>` | AI: subtitle-ai | Ubuntu 26.04.1 | Ryzen 5 5500, 12 threads | 14 GB | RTX 3070 (8 GB) |
 | MYPHY-UBUNTU-TESTING-SERVER | `<testing-ip>` | Testing: Dockhand, OmniRoute | Ubuntu 24.04.5 | AMD RX-427BB, 4 threads | 6.7 GB | Radeon R7 (integrated) |
 
 ## Network and access
@@ -21,9 +22,9 @@ Three subnets are in use. `<storage-net>` is the storage network that carries NF
 
 | Subnet | Purpose | Hosts |
 | --- | --- | --- |
-| `<server-lan>` | Server LAN | Testing, Media, Master |
+| `<server-lan>` | Server LAN | Testing, Media, AI, Master |
 | `<nas-lan>` | NAS LAN | ImranNas |
-| `<storage-net>` | Storage network (NFS) | Media (10 GbE bond), Master, NAS (bond) |
+| `<storage-net>` | Storage network (NFS) | Media (10 GbE bond), AI, Master, NAS (bond) |
 
 **NFS shares from the NAS**
 
@@ -31,11 +32,12 @@ Three subnets are in use. `<storage-net>` is the storage network that carries NF
 | --- | --- | --- | --- |
 | Master | /mnt/user/main_directory | /data | `<nas-storage-ip>` |
 | Master | /mnt/user/private_directory | /mnt/private | `<nas-storage-ip>` |
+| AI | /mnt/user/main_directory | /data | `<nas-storage-ip>` |
 | Media | /mnt/user/main_directory | /data | `<nas-ip>` |
 
 **Remote access:** the NAS runs Tailscale, a Twingate connector and a Cloudflare tunnel (cloudflared).
 
-**SSH:** all four hosts accept an ECDSA P-384 key. The Media server runs a FIPS build of OpenSSH, which refuses ED25519 keys; ECDSA on NIST curves and RSA of 2048 bits or more are FIPS-approved.
+**SSH:** all five hosts accept an ECDSA P-384 key. The Media server runs a FIPS build of OpenSSH, which refuses ED25519 keys; ECDSA on NIST curves and RSA of 2048 bits or more are FIPS-approved.
 
 ## Server details
 
@@ -81,9 +83,18 @@ Ubuntu 24.04.5, kernel 6.8.0-139, Docker 29.8.1.
 | --- | --- | --- |
 | / (LVM) | 177 GB | 23 GB (14%) |
 
+### MYPHY-UBUNTU-AI-SERVER
+
+Ubuntu 26.04.1, kernel 7.0.0-34, Docker 29.8.1, NVIDIA driver 595.91.07. Gigabyte B550M DS3H AC R2 board. Added 2026-09-27; also on the storage network at `<ai-storage-ip>`. Its Wi-Fi is also connected to the server LAN, alongside the wired connection.
+
+| Storage | Size | Used |
+| --- | --- | --- |
+| / (LVM, NVMe) | 885 GB | 40 GB (5%) |
+| /data | NFS from NAS | see NAS |
+
 ## Services
 
-All 47 containers were running on 2026-09-25. Port is the host port for the web UI or API; a blank means none is published. Three services run on two hosts: metube, tdarr_node and docker-socket-proxy.
+All 48 containers were running when last checked: 2026-09-27 for Master and AI, 2026-09-25 for the rest. Port is the host port for the web UI or API; a blank means none is published. Three services run on more than one host: metube, tdarr_node and docker-socket-proxy.
 
 ### Media playback and libraries
 
@@ -142,7 +153,7 @@ qBittorrent and NZBGet run inside Gluetun's network namespace, so their traffic 
 | Tdarr node | NAS | | haveagitgat/tdarr_node |
 | Tdarr node | Master | | haveagitgat/tdarr_node |
 | Tdarr Inform | NAS | 5004 | deathbybandaid/tdarr_inform |
-| subtitle-ai | Master | 8099 | subtitle-ai:dev (local build) |
+| subtitle-ai | AI | 8099 | subtitle-ai:dev (local build) |
 | subtitle-ai-translate-server | Media | 8091 | subtitle-ai:dev (local build) |
 | Jellyfin SubSync | NAS | 8420 | marnalas/jellyfin-subsync-sidecar |
 
@@ -165,6 +176,7 @@ qBittorrent and NZBGet run inside Gluetun's network namespace, so their traffic 
 | Twingate connector | NAS | | twingate/connector |
 | docker-socket-proxy | NAS | 2375 | tecnativa/docker-socket-proxy |
 | docker-socket-proxy | Master | 2375 | tecnativa/docker-socket-proxy |
+| docker-socket-proxy | AI | 2375 | tecnativa/docker-socket-proxy |
 | Dockhand | Testing | 3000 | fnsys/dockhand |
 | Dockhand Postgres | Testing | | postgres:16-alpine |
 | OmniRoute | Testing | 20128 | diegosouzapw/omniroute |
