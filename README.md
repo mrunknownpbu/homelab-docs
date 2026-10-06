@@ -1,12 +1,12 @@
 # Homelab
 
-Last updated: 2026-09-25
+Last updated: 2026-10-06
 
 IP addresses are replaced with placeholders such as `<nas-ip>`.
 
 ## Overview
 
-The homelab is five servers running 49 Docker containers, mostly a self-hosted media stack. The Unraid NAS holds 99 TB of storage and runs 35 of the containers; four Ubuntu servers handle playback, transcoding, AI and testing.
+The homelab is five servers running 67 Docker containers, mostly a self-hosted media stack. The Unraid NAS holds 99 TB of storage and runs 39 of the containers; four Ubuntu servers handle playback, transcoding, AI and testing. A Prometheus and Grafana stack on the Testing server monitors all of them (see [Monitoring](#monitoring)). One external Linode VPS, a VPN gateway, is monitored too but is not counted as one of the five.
 
 | Host | IP | Role | OS | CPU | RAM | GPU |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -14,7 +14,9 @@ The homelab is five servers running 49 Docker containers, mostly a self-hosted m
 | MYPHY-UBUNTU-MASTER-SERVER | `<master-ip>` | Transcoding (Tdarr node), tools | Ubuntu 24.04.5 | Xeon X5675, 24 threads | 125 GB | Tesla P4 |
 | MYPHY-UBUNTU-MEDIA-SERVER | `<media-ip>` | Playback: Jellyfin, Plex, Komga, Navidrome | Ubuntu 24.04.5 (FIPS kernel) | Ryzen 5 5600G, 12 threads | 30 GB | RTX 3070 |
 | MYPHY-UBUNTU-AI-SERVER | `<ai-ip>` | AI: subtitle-ai | Ubuntu 26.04.1 | Ryzen 5 5500, 12 threads | 14 GB | RTX 3070 (8 GB) |
-| MYPHY-UBUNTU-TESTING-SERVER | `<testing-ip>` | Testing: Dockhand, OmniRoute | Ubuntu 24.04.5 | AMD RX-427BB, 4 threads | 6.7 GB | Radeon R7 (integrated) |
+| MYPHY-UBUNTU-TESTING-SERVER | `<testing-ip>` | Testing and monitoring: Dockhand, OmniRoute, Prometheus, Grafana | Ubuntu 24.04.5 | AMD RX-427BB, 4 threads | 6.7 GB | Radeon R7 (integrated) |
+
+**External host:** SGVMP-UBUNTU-GATEWAY-SERVER is a Linode VPS (Ubuntu 24.04.5, 25 GB disk) at `<vps-ip>`. It is a VPN gateway running OpenVPN, WireGuard and Tailscale, plus Uptime Kuma and ntopng. It is monitored over its public IP and is outside the five-server count.
 
 ## Network and access
 
@@ -94,7 +96,7 @@ Ubuntu 26.04.1, kernel 7.0.0-34, Docker 29.8.1, NVIDIA driver 595.91.07. Gigabyt
 
 ## Services
 
-All 49 containers were running on 2026-09-27. Port is the host port for the web UI or API; a blank means none is published. Three services run on more than one host: metube, tdarr_node and docker-socket-proxy.
+All 67 containers were running on 2026-10-06. Port is the host port for the web UI or API; a blank means none is published. Three services run on more than one host: metube, tdarr_node and docker-socket-proxy. The monitoring exporters (see [Monitoring](#monitoring)) also run on several hosts.
 
 ### Media playback and libraries
 
@@ -182,19 +184,76 @@ qBittorrent and NZBGet run inside Gluetun's network namespace, so their traffic 
 | Dockhand Postgres | Testing | | postgres:16-alpine |
 | OmniRoute | Testing | 20128 | diegosouzapw/omniroute |
 
+### Monitoring
+
+| Service | Host | Port | Image |
+| --- | --- | --- | --- |
+| Prometheus | Testing | 9090 | prom/prometheus |
+| Grafana | Testing | 3030 | grafana/grafana |
+| cAdvisor | Testing, Media, Master, AI, NAS | 18080 | ghcr.io/google/cadvisor |
+| node_exporter (container) | Master, AI, NAS | 9100 | prom/node-exporter |
+| NVIDIA GPU exporter | Media, Master, AI, NAS | 9835 | utkuozdemir/nvidia_gpu_exporter |
+| smartctl exporter | NAS | 9633 | prometheuscommunity/smartctl-exporter |
+
+## Monitoring
+
+Prometheus scrapes every host every 15 seconds and keeps 90 days of data. Grafana reads from it at `http://<testing-ip>:3030` (user `admin`; the password is in the `.env` file next to the compose file on Testing). Prometheus is at `http://<testing-ip>:9090`.
+
+**What is scraped**
+
+| Job | Targets | Notes |
+| --- | --- | --- |
+| node | all five servers and the VPS | Testing and Media run node_exporter as a systemd service; Master, AI, NAS and the VPS run it as a container |
+| cadvisor | all five servers and the VPS | Per-container CPU, memory, network |
+| nvidia_gpu | Media, Master, AI, NAS | GPU use, temperature, VRAM |
+| smartctl | NAS | Disk SMART health and temperature, every 60 seconds |
+
+Every target carries a `host` label (testing, media, master, ai, nas, vps).
+
+**Grafana dashboards** (folder "Homelab", provisioned from JSON files): Node Exporter Full, cAdvisor, NVIDIA GPU Metrics, and smartctl. They came from grafana.com (IDs 1860, 14282, 14574, 20204). The smartctl dashboard is filtered to the NAS exporter.
+
+**Alert rules** (`alerts.yml`, shown in Grafana under Alerting)
+
+| Alert | Fires when | Severity |
+| --- | --- | --- |
+| HostDown | a host's node_exporter is unreachable for 2 minutes | critical |
+| ExporterDown | any other exporter is unreachable for 5 minutes | warning |
+| DiskSpaceLow | a filesystem has under 10% free for 10 minutes | warning |
+| DiskSpaceCritical | a filesystem has under 5% free for 5 minutes | critical |
+
+The disk rules skip tmpfs, overlay and similar pseudo-filesystems, and NFS mounts, so the NAS is not counted again on the hosts that mount it. No notification channel is configured yet, so alerts only appear in the Grafana and Prometheus UIs.
+
+**Where the files are**
+
+| Host | Compose file |
+| --- | --- |
+| Testing | `/opt/docker/compose/monitoring/compose.yaml` (also `prometheus/prometheus.yml`, `prometheus/alerts.yml`, `grafana/provisioning/`) |
+| Testing data | `/opt/docker/appdata/monitoring/` (Prometheus, Grafana, dashboards) |
+| Media, Master, AI | `/opt/docker/compose/exporters/compose.yml` |
+| NAS | `/mnt/user/docker-compose/compose/monitoring/compose.yaml` |
+| VPS | `/opt/docker/compose/exporters/compose.yml` |
+
+To change scrape targets or alerts, edit the files on Testing and restart Prometheus: `cd /opt/docker/compose/monitoring && docker compose restart prometheus`.
+
+**VPS access:** the VPS is scraped over its public IP. Ports 9100 and 18080 there accept only the home public IP, plus loopback and the `tailscale0`, `tun0` and `wg0` interfaces; everything else on `eth0` is dropped (IPv4 and IPv6). This is a separate `EXPORTER-IN` iptables chain, set at boot by `exporter-firewall.service` from `/usr/local/sbin/exporter-firewall.sh`. The home IP is PPPoE and can change. If it does, the VPS scrape fails and HostDown fires; update `ALLOW=` in that script and run `systemctl restart exporter-firewall` on the VPS. Testing cannot reach the VPS over Tailscale, because pfSense does not NAT LAN traffic into the tailnet.
+
+**Older stack:** a previous Prometheus, Loki, Alloy, Grafana and Authentik stack (data to March 2026) is still on disk on Testing in `/opt/docker` (`compose.recovered`, `config/`, `data/`). It is not running and is not used by the current stack.
+
 ## Maintenance
 
-The main follow-ups are the Media server's NFS route and pinning image versions.
+The main follow-ups are the Media server's NFS route, pinning image versions, and adding a notification channel for alerts.
 
 ### Health check
 
-This lists Docker containers on every host. It assumes SSH aliases named testing, media, master and nas in `~/.ssh/config`:
+This lists Docker containers on every host. It uses the SSH aliases from `~/.ssh/config`:
 
 ```bash
-for h in testing media master nas; do
+for h in myphy-testing myphy-media myphy-master myphy-ai myphy-nas; do
   echo "== $h"; ssh $h 'docker ps -a --format "{{.Names}}\t{{.Status}}"'
 done
 ```
+
+To check the monitoring itself, open Prometheus at `http://<testing-ip>:9090/targets`. All targets should be up.
 
 The NAS is Unraid, so `systemctl` isn't available there; check Docker with `docker info` instead.
 
@@ -211,3 +270,7 @@ The NAS is Unraid, so `systemctl` isn't available there; check Docker with `dock
 - [x] Add a `~/.ssh/config` alias for the NAS, like the other four hosts have.
 - [ ] Nearly every image uses the `latest` tag, so a pull can bring in breaking changes; pin versions for critical services (Vaultwarden, Immich).
 - [ ] Watch NAS disk1 and disk2, the fullest array disks at 76% and 75%.
+- [ ] Add a notification channel (Alertmanager, or Uptime Kuma on the VPS) so firing alerts send a message instead of only showing in Grafana.
+- [ ] Set up a pfSense SNMP dashboard; the old stack had one, the current stack does not.
+- [ ] The VPS exporter allow-list depends on the home public IP, which can change.
+- [ ] The VPS allows SSH root login with a password; consider key-only login.
